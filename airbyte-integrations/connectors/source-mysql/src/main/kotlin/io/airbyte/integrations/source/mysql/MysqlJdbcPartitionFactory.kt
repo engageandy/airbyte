@@ -27,13 +27,13 @@ import io.airbyte.cdk.read.StreamFeedBootstrap
 import io.airbyte.cdk.util.Jsons
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micronaut.context.annotation.Primary
+import jakarta.inject.Singleton
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
 import java.time.temporal.ChronoField
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
-import javax.inject.Singleton
 
 private val log = KotlinLogging.logger {}
 
