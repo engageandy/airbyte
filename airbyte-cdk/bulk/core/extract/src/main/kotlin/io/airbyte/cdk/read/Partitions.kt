@@ -155,8 +155,7 @@ interface PartitionReader {
 data class PartitionReadCheckpoint(
     val opaqueStateValue: OpaqueStateValue,
     val numRecords: Long,
-) {
-    init {
-        log.info { "SGX PartitionReadCheckpoint: $opaqueStateValue, $numRecords" }
-    }
-}
+)
+
+/** A [PartitionReader] with no time limit for its execution. */
+interface UnlimitedTimePartitionReader : PartitionReader

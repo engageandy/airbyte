@@ -9,19 +9,19 @@ import io.airbyte.cdk.read.ConcurrencyResource
 import io.airbyte.cdk.read.PartitionReadCheckpoint
 import io.airbyte.cdk.read.PartitionReader
 import io.airbyte.cdk.read.StreamRecordConsumer
+import io.airbyte.cdk.read.UnlimitedTimePartitionReader
 import io.airbyte.protocol.models.v0.StreamDescriptor
 import io.debezium.engine.ChangeEvent
 import io.debezium.engine.DebeziumEngine
 import io.debezium.engine.format.Json
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.Properties
+import java.util.*
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Consumer
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import org.apache.kafka.connect.source.SourceRecord
 
@@ -32,7 +32,7 @@ class CdcPartitionReader<T : Comparable<T>>(
     val readerOps: CdcPartitionReaderDebeziumOperations<T>,
     val upperBound: T,
     val input: DebeziumInput,
-) : PartitionReader {
+) : UnlimitedTimePartitionReader {
     private val log = KotlinLogging.logger {}
     private val acquiredThread = AtomicReference<ConcurrencyResource.AcquiredThread>()
     private lateinit var stateFilesAccessor: DebeziumStateFilesAccessor
@@ -200,8 +200,7 @@ class CdcPartitionReader<T : Comparable<T>>(
             if (event.sourceRecord == null) {
                 numEventsWithoutSourceRecord.incrementAndGet()
             }
-
-            val counterToIncrement = when (eventType) {
+            when (eventType) {
                 EventType.TOMBSTONE -> numTombstones
                 EventType.HEARTBEAT -> numHeartbeats
                 EventType.KEY_JSON_INVALID,
@@ -209,11 +208,7 @@ class CdcPartitionReader<T : Comparable<T>>(
                 EventType.RECORD_DISCARDED_BY_DESERIALIZE,
                 EventType.RECORD_DISCARDED_BY_STREAM_ID -> numDiscardedRecords
                 EventType.RECORD_EMITTED -> numEmittedRecords
-            }
-            if (counterToIncrement === numDiscardedRecords) {
-                log.info{"SGX discarding record eventType=$eventType, event=$event"}
-            }
-            counterToIncrement.incrementAndGet()
+            }.incrementAndGet()
         }
 
         private fun findCloseReason(event: DebeziumEvent, eventType: EventType): CloseReason? {
@@ -225,19 +220,13 @@ class CdcPartitionReader<T : Comparable<T>>(
                 // in interrupting it until the snapshot is done.
                 return null
             }
-            if (!coroutineContext.isActive) {
-                log.info{"SGX returning TIMEOUT"}
-                return CloseReason.TIMEOUT
-            }
             val currentPosition: T? = position(event.sourceRecord) ?: position(event.value)
-            log.info{"SGX currentPosition=$currentPosition, upperBound=$upperBound."}
             if (currentPosition == null || currentPosition < upperBound) {
-                log.info{"SGX returning null"}
                 return null
             }
 
             // Close because the current event is past the sync upper bound.
-            val retVal = when (eventType) {
+            return when (eventType) {
                 EventType.TOMBSTONE,
                 EventType.HEARTBEAT -> CloseReason.HEARTBEAT_OR_TOMBSTONE_REACHED_TARGET_POSITION
                 EventType.KEY_JSON_INVALID,
@@ -247,9 +236,6 @@ class CdcPartitionReader<T : Comparable<T>>(
                 EventType.RECORD_DISCARDED_BY_STREAM_ID ->
                     CloseReason.RECORD_REACHED_TARGET_POSITION
             }
-
-            log.info{"SGX returning $retVal. eventType=$eventType, event=$event"}
-            return retVal
         }
 
         private fun position(sourceRecord: SourceRecord?): T? {
