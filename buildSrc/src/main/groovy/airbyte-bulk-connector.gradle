@@ -159,21 +159,33 @@ class AirbyteBulkConnectorPlugin implements Plugin<Project> {
             }
         }
 
-        // This task exists solely so that we can run the "modern" integration tests
-        // in non-docker mode on our laptops.
-        // It's not a dependency of any other task.
-        project.tasks.register('integrationTestNonDocker', Test) {
-            description = 'Runs the integration tests in non-docker mode.'
-            group = 'verification'
-            testClassesDirs = project.sourceSets.integrationTest.output.classesDirs
-            classpath = project.sourceSets.integrationTest.runtimeClasspath
-            useJUnitPlatform()
+            // For historical reasons (i.e. airbyte-ci), this task is called integrationTestJava.
+            // airbyte-ci only wants to run a task with exactly that name.
+            // There's intentionally no equivalent to run integrationTestNonDocker + integrationTestLegacy.
+            // It's an actual Test task (rather than just depending on two sub-tasks integrationTestDocker + integrationTestLegacy)
+            // so that gradle args (e.g. `--tests`) work as expected.
+            project.tasks.register('integrationTestJava', Test) {
+                description = 'Runs the integration tests in docker mode.'
+                group = 'verification'
+                testClassesDirs = project.sourceSets.integrationTest.output.classesDirs + project.sourceSets.integrationTestLegacy.output.classesDirs
+                classpath = project.sourceSets.integrationTest.runtimeClasspath + project.sourceSets.integrationTestLegacy.runtimeClasspath
+                useJUnitPlatform()
+                // We need a docker image to run this task, so depend on assemble
+                dependsOn project.tasks.assemble
+                environment "AIRBYTE_CONNECTOR_INTEGRATION_TEST_RUNNER", "docker"
 
-            jvmArgs = project.test.jvmArgs
-            systemProperties = project.test.systemProperties
-            maxParallelForks = project.test.maxParallelForks
-            maxHeapSize = project.test.maxHeapSize
-        }
+                jvmArgs = project.test.jvmArgs
+                systemProperties = project.test.systemProperties
+                maxParallelForks = project.test.maxParallelForks
+                maxHeapSize = project.test.maxHeapSize
+
+                testLogging() {
+                    events 'skipped', 'started', 'passed', 'failed'
+                    exceptionFormat 'full'
+                    // Swallow the logs when running in airbyte-ci, rely on test reports instead.
+                    showStandardStreams = !System.getenv().containsKey("RUN_IN_AIRBYTE_CI")
+                }
+            }
 
         // For historical reasons (i.e. airbyte-ci), this task is called integrationTestJava.
         // airbyte-ci only wants to run a task with exactly that name.
