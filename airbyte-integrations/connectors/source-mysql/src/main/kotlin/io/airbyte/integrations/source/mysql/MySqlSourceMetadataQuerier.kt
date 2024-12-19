@@ -25,7 +25,7 @@ import kotlin.math.exp
 private val log = KotlinLogging.logger {}
 
 /** Delegates to [JdbcMetadataQuerier] except for [fields]. */
-class MysqlSourceMetadataQuerier(
+class MySqlSourceMetadataQuerier(
     val base: JdbcMetadataQuerier,
 ) : MetadataQuerier by base {
 
@@ -124,7 +124,7 @@ class MysqlSourceMetadataQuerier(
         val results = mutableListOf<AllPrimaryKeysRow>()
         val schemas: List<String> = streamNamespaces()
         val sql: String = PK_QUERY_FMTSTR.format(schemas.joinToString { "\'$it\'" })
-        log.info { "Querying Mysql system tables for all primary keys for catalog discovery." }
+        log.info { "Querying MySQL system tables for all primary keys for catalog discovery." }
         try {
             // Get primary keys for the specified table
             base.conn.createStatement().use { stmt: Statement ->
@@ -142,7 +142,7 @@ class MysqlSourceMetadataQuerier(
                     }
                 }
             }
-            log.info { "Discovered all primary keys in ${schemas.size} Mysql schema(s)." }
+            log.info { "Discovered all primary keys in ${schemas.size} MySQL schema(s)." }
             return@lazy results
                 .groupBy {
                     findTableName(
@@ -171,7 +171,7 @@ class MysqlSourceMetadataQuerier(
                 }
                 .toMap()
         } catch (e: Exception) {
-            throw RuntimeException("Mysql primary key discovery query failed: ${e.message}", e)
+            throw RuntimeException("MySQL primary key discovery query failed: ${e.message}", e)
         }
     }
 
@@ -208,7 +208,7 @@ class MysqlSourceMetadataQuerier(
             """
     }
 
-    /** Mysql implementation of [MetadataQuerier.Factory]. */
+    /** MySQL implementation of [MetadataQuerier.Factory]. */
     @Singleton
     @Primary
     class Factory(
@@ -216,9 +216,9 @@ class MysqlSourceMetadataQuerier(
         val selectQueryGenerator: SelectQueryGenerator,
         val fieldTypeMapper: JdbcMetadataQuerier.FieldTypeMapper,
         val checkQueries: JdbcCheckQueries,
-    ) : MetadataQuerier.Factory<MysqlSourceConfiguration> {
+    ) : MetadataQuerier.Factory<MySqlSourceConfiguration> {
         /** The [SourceConfiguration] is deliberately not injected in order to support tests. */
-        override fun session(config: MysqlSourceConfiguration): MetadataQuerier {
+        override fun session(config: MySqlSourceConfiguration): MetadataQuerier {
             val jdbcConnectionFactory = JdbcConnectionFactory(config)
             val base =
                 JdbcMetadataQuerier(
@@ -229,7 +229,7 @@ class MysqlSourceMetadataQuerier(
                     checkQueries,
                     jdbcConnectionFactory,
                 )
-            return MysqlSourceMetadataQuerier(base)
+            return MySqlSourceMetadataQuerier(base)
         }
     }
 }

@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.testcontainers.containers.MySQLContainer
 
-class MysqlCursorBasedIntegrationTest {
+class MySqlSourceCursorBasedIntegrationTest {
 
     @BeforeEach
     fun resetTable() {
@@ -163,13 +163,13 @@ class MysqlCursorBasedIntegrationTest {
 
     companion object {
         val log = KotlinLogging.logger {}
-        val dbContainer: MySQLContainer<*> = MysqlContainerFactory.shared(imageName = "mysql:8.0")
+        val dbContainer: MySQLContainer<*> = MySqlContainerFactory.shared(imageName = "mysql:8.0")
 
-        val config: MysqlSourceConfigurationSpecification =
-            MysqlContainerFactory.config(dbContainer)
+        val config: MySqlSourceConfigurationSpecification =
+            MySqlContainerFactory.config(dbContainer)
 
         val connectionFactory: JdbcConnectionFactory by lazy {
-            JdbcConnectionFactory(MysqlSourceConfigurationFactory().make(config))
+            JdbcConnectionFactory(MySqlSourceConfigurationFactory().make(config))
         }
 
         fun getConfiguredCatalog(): ConfiguredAirbyteCatalog {
@@ -180,7 +180,7 @@ class MysqlCursorBasedIntegrationTest {
                     columns = listOf(Field("k", IntFieldType), Field("v", StringFieldType)),
                     primaryKeyColumnIDs = listOf(listOf("k")),
                 )
-            val stream: AirbyteStream = MysqlSourceOperations().createGlobal(discoveredStream)
+            val stream: AirbyteStream = MySqlSourceOperations().createGlobal(discoveredStream)
             val configuredStream: ConfiguredAirbyteStream =
                 CatalogHelpers.toDefaultConfiguredStream(stream)
                     .withSyncMode(SyncMode.INCREMENTAL)

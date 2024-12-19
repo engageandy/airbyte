@@ -42,15 +42,15 @@ private val log = KotlinLogging.logger {}
 
 @Primary
 @Singleton
-class MysqlJdbcPartitionFactory(
+class MySqlSourceJdbcPartitionFactory(
     override val sharedState: DefaultJdbcSharedState,
-    val selectQueryGenerator: MysqlSourceOperations,
-    val config: MysqlSourceConfiguration,
+    val selectQueryGenerator: MySqlSourceOperations,
+    val config: MySqlSourceConfiguration,
 ) :
     JdbcPartitionFactory<
         DefaultJdbcSharedState,
         DefaultJdbcStreamState,
-        MysqlJdbcPartition,
+        MySqlSourceJdbcPartition,
     > {
 
     private val streamStates = ConcurrentHashMap<StreamIdentifier, DefaultJdbcStreamState>()
@@ -81,13 +81,13 @@ class MysqlJdbcPartitionFactory(
         }
     }
 
-    private fun coldStart(streamState: DefaultJdbcStreamState): MysqlJdbcPartition {
+    private fun coldStart(streamState: DefaultJdbcStreamState): MySqlSourceJdbcPartition {
         val stream: Stream = streamState.stream
         val pkChosenFromCatalog: List<Field> = stream.configuredPrimaryKey ?: listOf()
 
         if (stream.configuredSyncMode == ConfiguredSyncMode.FULL_REFRESH) {
             if (pkChosenFromCatalog.isEmpty()) {
-                return MysqlJdbcNonResumableSnapshotPartition(
+                return MySqlSourceJdbcNonResumableSnapshotPartition(
                     selectQueryGenerator,
                     streamState,
                 )
@@ -95,7 +95,7 @@ class MysqlJdbcPartitionFactory(
 
             val upperBound = findPkUpperBound(stream, pkChosenFromCatalog)
             if (sharedState.configuration.global) {
-                return MysqlJdbcCdcRfrSnapshotPartition(
+                return MySqlSourceJdbcCdcRfrSnapshotPartition(
                     selectQueryGenerator,
                     streamState,
                     pkChosenFromCatalog,
@@ -103,7 +103,7 @@ class MysqlJdbcPartitionFactory(
                     upperBound = listOf(upperBound)
                 )
             } else {
-                return MysqlJdbcRfrSnapshotPartition(
+                return MySqlSourceJdbcRfrSnapshotPartition(
                     selectQueryGenerator,
                     streamState,
                     pkChosenFromCatalog,
@@ -114,7 +114,7 @@ class MysqlJdbcPartitionFactory(
         }
 
         if (sharedState.configuration.global) {
-            return MysqlJdbcCdcSnapshotPartition(
+            return MySqlSourceJdbcCdcSnapshotPartition(
                 selectQueryGenerator,
                 streamState,
                 pkChosenFromCatalog,
@@ -126,13 +126,13 @@ class MysqlJdbcPartitionFactory(
             stream.configuredCursor as? Field ?: throw ConfigErrorException("no cursor")
 
         if (pkChosenFromCatalog.isEmpty()) {
-            return MysqlJdbcNonResumableSnapshotWithCursorPartition(
+            return MySqlSourceJdbcNonResumableSnapshotWithCursorPartition(
                 selectQueryGenerator,
                 streamState,
                 cursorChosenFromCatalog
             )
         }
-        return MysqlJdbcSnapshotWithCursorPartition(
+        return MySqlSourceJdbcSnapshotWithCursorPartition(
             selectQueryGenerator,
             streamState,
             pkChosenFromCatalog,
@@ -160,12 +160,7 @@ class MysqlJdbcPartitionFactory(
      *      ii. In cursor read phase, use cursor incremental.
      * ```
      */
-    override fun create(streamFeedBootstrap: StreamFeedBootstrap): MysqlJdbcPartition? {
-        val retVal = createInternal(streamFeedBootstrap)
-        log.info { "SGX retVal=$retVal" }
-        return retVal
-    }
-    fun createInternal(streamFeedBootstrap: StreamFeedBootstrap): MysqlJdbcPartition? {
+    override fun create(streamFeedBootstrap: StreamFeedBootstrap): MySqlSourceJdbcPartition? {
         val stream: Stream = streamFeedBootstrap.feed
         val streamState: DefaultJdbcStreamState = streamState(streamFeedBootstrap)
 
@@ -195,19 +190,22 @@ class MysqlJdbcPartitionFactory(
         ) {
             if (
                 streamState.streamFeedBootstrap.currentState ==
-                    MysqlJdbcStreamStateValue.snapshotCompleted
+                    MySqlSourceJdbcStreamStateValue.snapshotCompleted
             ) {
                 return null
             }
-            return MysqlJdbcNonResumableSnapshotPartition(
+            return MySqlSourceJdbcNonResumableSnapshotPartition(
                 selectQueryGenerator,
                 streamState,
             )
         }
 
         if (!isCursorBased) {
-            val sv: MysqlCdcInitialSnapshotStateValue =
-                Jsons.treeToValue(opaqueStateValue, MysqlCdcInitialSnapshotStateValue::class.java)
+            val sv: MySqlSourceCdcInitialSnapshotStateValue =
+                Jsons.treeToValue(
+                    opaqueStateValue,
+                    MySqlSourceCdcInitialSnapshotStateValue::class.java
+                )
 
             if (stream.configuredSyncMode == ConfiguredSyncMode.FULL_REFRESH) {
                 val upperBound = findPkUpperBound(stream, pkChosenFromCatalog)
@@ -216,7 +214,7 @@ class MysqlJdbcPartitionFactory(
                 }
                 val pkLowerBound: JsonNode = stateValueToJsonNode(pkChosenFromCatalog[0], sv.pkVal)
 
-                return MysqlJdbcRfrSnapshotPartition(
+                return MySqlSourceJdbcRfrSnapshotPartition(
                     selectQueryGenerator,
                     streamState,
                     pkChosenFromCatalog,
@@ -241,7 +239,7 @@ class MysqlJdbcPartitionFactory(
                     if (sv.pkVal == upperBound.asText()) {
                         return null
                     }
-                    return MysqlJdbcCdcRfrSnapshotPartition(
+                    return MySqlSourceJdbcCdcRfrSnapshotPartition(
                         selectQueryGenerator,
                         streamState,
                         pkChosenFromCatalog,
@@ -249,7 +247,7 @@ class MysqlJdbcPartitionFactory(
                         upperBound = listOf(upperBound)
                     )
                 }
-                return MysqlJdbcCdcSnapshotPartition(
+                return MySqlSourceJdbcCdcSnapshotPartition(
                     selectQueryGenerator,
                     streamState,
                     pkChosenFromCatalog,
@@ -257,8 +255,8 @@ class MysqlJdbcPartitionFactory(
                 )
             }
         } else {
-            val sv: MysqlJdbcStreamStateValue =
-                Jsons.treeToValue(opaqueStateValue, MysqlJdbcStreamStateValue::class.java)
+            val sv: MySqlSourceJdbcStreamStateValue =
+                Jsons.treeToValue(opaqueStateValue, MySqlSourceJdbcStreamStateValue::class.java)
 
             if (stream.configuredSyncMode == ConfiguredSyncMode.FULL_REFRESH) {
                 val upperBound = findPkUpperBound(stream, pkChosenFromCatalog)
@@ -268,7 +266,7 @@ class MysqlJdbcPartitionFactory(
                 val pkLowerBound: JsonNode =
                     stateValueToJsonNode(pkChosenFromCatalog[0], sv.pkValue)
 
-                return MysqlJdbcCdcRfrSnapshotPartition(
+                return MySqlSourceJdbcCdcRfrSnapshotPartition(
                     selectQueryGenerator,
                     streamState,
                     pkChosenFromCatalog,
@@ -287,7 +285,7 @@ class MysqlJdbcPartitionFactory(
                     stream.configuredCursor as? Field ?: throw ConfigErrorException("no cursor")
 
                 // in a state where it's still in primary_key read part.
-                return MysqlJdbcSnapshotWithCursorPartition(
+                return MySqlSourceJdbcSnapshotWithCursorPartition(
                     selectQueryGenerator,
                     streamState,
                     pkChosenFromCatalog,
@@ -310,7 +308,7 @@ class MysqlJdbcPartitionFactory(
                 // Incremental complete.
                 return null
             }
-            return MysqlJdbcCursorIncrementalPartition(
+            return MySqlSourceJdbcCursorIncrementalPartition(
                 selectQueryGenerator,
                 streamState,
                 cursor,
@@ -401,9 +399,9 @@ class MysqlJdbcPartitionFactory(
     }
 
     override fun split(
-        unsplitPartition: MysqlJdbcPartition,
+        unsplitPartition: MySqlSourceJdbcPartition,
         opaqueStateValues: List<OpaqueStateValue>
-    ): List<MysqlJdbcPartition> {
+    ): List<MySqlSourceJdbcPartition> {
         // At this moment we don't support split on within mysql stream in any mode.
         return listOf(unsplitPartition)
     }
