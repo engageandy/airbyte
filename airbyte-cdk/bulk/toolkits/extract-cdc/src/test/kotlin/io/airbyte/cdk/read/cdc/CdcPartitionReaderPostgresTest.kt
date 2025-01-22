@@ -3,13 +3,6 @@ package io.airbyte.cdk.read.cdc
 import com.alibaba.dcm.DnsCacheManipulator
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.ObjectNode
-import com.mongodb.client.MongoClient
-import com.mongodb.client.MongoClients
-import com.mongodb.client.MongoCollection
-import com.mongodb.client.MongoDatabase
-import com.mongodb.client.model.Aggregates
-import com.mongodb.client.model.Filters
-import com.mongodb.client.model.Updates
 import io.airbyte.cdk.command.OpaqueStateValue
 import io.airbyte.cdk.read.Stream
 import io.airbyte.cdk.testcontainers.TestContainerFactory
@@ -86,8 +79,9 @@ class CdcPartitionReaderPostgresTest :
             connection.createStatement().use { fn(it) }
         }
 
-    override fun getCdcOperations(): DebeziumOperations<LogSequenceNumber> {
-        return object: AbstractCdcPartitionReaderDebeziumOperationsForTest<LogSequenceNumber>(stream) {
+    override fun createDebeziumOperations(): DebeziumOperations<LogSequenceNumber> {
+        return object :
+            AbstractCdcPartitionReaderDebeziumOperationsForTest<LogSequenceNumber>(stream) {
             override fun position(offset: DebeziumOffset): LogSequenceNumber {
                 val offsetValue: ObjectNode = offset.wrapped.values.first() as ObjectNode
                 return LogSequenceNumber.valueOf(offsetValue["lsn"].asLong())
@@ -95,7 +89,8 @@ class CdcPartitionReaderPostgresTest :
 
             override fun position(recordValue: DebeziumRecordValue): LogSequenceNumber? {
                 val lsn: Long =
-                    recordValue.source["lsn"]?.takeIf { it.isIntegralNumber }?.asLong() ?: return null
+                    recordValue.source["lsn"]?.takeIf { it.isIntegralNumber }?.asLong()
+                        ?: return null
                 return LogSequenceNumber.valueOf(lsn)
             }
 
@@ -105,14 +100,16 @@ class CdcPartitionReaderPostgresTest :
                 return LogSequenceNumber.valueOf(lsn)
             }
 
-            override fun deserialize(opaqueStateValue: OpaqueStateValue, streams: List<Stream>): DebeziumInput {
+            override fun deserialize(
+                opaqueStateValue: OpaqueStateValue,
+                streams: List<Stream>
+            ): DebeziumInput {
                 return super.deserialize(opaqueStateValue, streams).let {
                     DebeziumInput(debeziumProperties(), it.state, it.isSynthetic)
-
                 }
             }
 
-            override fun synthesize(streams: List<Stream>): DebeziumInput {
+            override fun synthesize(): DebeziumInput {
                 val (position: LogSequenceNumber, txID: Long) =
                     container.withStatement { statement: Statement ->
                         statement.executeQuery("SELECT pg_current_wal_lsn(), txid_current()").use {
@@ -158,8 +155,6 @@ class CdcPartitionReaderPostgresTest :
                     .withStreams(listOf(stream))
                     .buildMap()
         }
-
-
     }
 }
 

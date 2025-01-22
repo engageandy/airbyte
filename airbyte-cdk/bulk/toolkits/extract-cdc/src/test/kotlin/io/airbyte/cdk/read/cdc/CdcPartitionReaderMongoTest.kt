@@ -81,11 +81,12 @@ class CdcPartitionReaderMongoTest :
             fn(it.getCollection(stream.name))
         }
 
-    override fun getCdcOperations(): DebeziumOperations<BsonTimestamp> {
+    override fun createDebeziumOperations(): DebeziumOperations<BsonTimestamp> {
         return object : AbstractCdcPartitionReaderDebeziumOperationsForTest<BsonTimestamp>(stream) {
             override fun position(recordValue: DebeziumRecordValue): BsonTimestamp? {
                 val resumeToken: String =
-                    recordValue.source["resume_token"]?.takeIf { it.isTextual }?.asText() ?: return null
+                    recordValue.source["resume_token"]?.takeIf { it.isTextual }?.asText()
+                        ?: return null
                 return ResumeTokens.getTimestamp(ResumeTokens.fromData(resumeToken))
             }
 
@@ -95,10 +96,12 @@ class CdcPartitionReaderMongoTest :
                 return ResumeTokens.getTimestamp(ResumeTokens.fromBase64(resumeTokenBase64))
             }
 
-            override fun deserialize(opaqueStateValue: OpaqueStateValue, streams: List<Stream>): DebeziumInput {
+            override fun deserialize(
+                opaqueStateValue: OpaqueStateValue,
+                streams: List<Stream>
+            ): DebeziumInput {
                 return super.deserialize(opaqueStateValue, streams).let {
                     DebeziumInput(debeziumProperties(), it.state, it.isSynthetic)
-
                 }
             }
 
@@ -119,7 +122,8 @@ class CdcPartitionReaderMongoTest :
                                 ?.let { Jsons.readTree(it)["v"] }
                                 ?.asInt()
                         if (v == null) {
-                            // In case a mongodb document was updated and then deleted, the update change
+                            // In case a mongodb document was updated and then deleted, the update
+                            // change
                             // event will not have any information ({after: null})
                             // We are going to treat it as a Delete.
                             Delete(id)
@@ -140,7 +144,7 @@ class CdcPartitionReaderMongoTest :
                 return BsonTimestamp(offsetValue["sec"].asInt(), offsetValue["ord"].asInt())
             }
 
-            override fun synthesize(streams: List<Stream>): DebeziumInput {
+            override fun synthesize(): DebeziumInput {
                 val resumeToken: BsonDocument = currentResumeToken()
                 val timestamp: BsonTimestamp = ResumeTokens.getTimestamp(resumeToken)
                 val resumeTokenString: String = ResumeTokens.getData(resumeToken).asString().value
@@ -163,7 +167,8 @@ class CdcPartitionReaderMongoTest :
 
             fun currentResumeToken(): BsonDocument =
                 container.withMongoDatabase { mongoDatabase: MongoDatabase ->
-                    val pipeline = listOf<Bson>(Aggregates.match(Filters.`in`("ns.coll", stream.name)))
+                    val pipeline =
+                        listOf<Bson>(Aggregates.match(Filters.`in`("ns.coll", stream.name)))
                     mongoDatabase.watch(pipeline, BsonDocument::class.java).cursor().use {
                         it.tryNext()
                         it.resumeToken!!
@@ -172,23 +177,23 @@ class CdcPartitionReaderMongoTest :
 
             fun debeziumProperties(): Map<String, String> =
                 DebeziumPropertiesBuilder()
-                .withDefault()
-                .withConnector(MongoDbConnector::class.java)
-                .withDebeziumName(stream.namespace!!)
-                .withHeartbeats(heartbeat)
-                .with("capture.scope", "database")
-                .with("capture.target", stream.namespace!!)
-                .with("mongodb.connection.string", container.connectionString)
-                .with("snapshot.mode", "no_data")
-                .with(
-                "collection.include.list",
-                DebeziumPropertiesBuilder.joinIncludeList(
-                listOf(Pattern.quote("${stream.namespace!!}.${stream.name}"))
-                )
-                )
-                .with("database.include.list", stream.namespace!!)
-                .withOffset()
-                .buildMap()
+                    .withDefault()
+                    .withConnector(MongoDbConnector::class.java)
+                    .withDebeziumName(stream.namespace!!)
+                    .withHeartbeats(heartbeat)
+                    .with("capture.scope", "database")
+                    .with("capture.target", stream.namespace!!)
+                    .with("mongodb.connection.string", container.connectionString)
+                    .with("snapshot.mode", "no_data")
+                    .with(
+                        "collection.include.list",
+                        DebeziumPropertiesBuilder.joinIncludeList(
+                            listOf(Pattern.quote("${stream.namespace!!}.${stream.name}"))
+                        )
+                    )
+                    .with("database.include.list", stream.namespace!!)
+                    .withOffset()
+                    .buildMap()
         }
     }
 }
